@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -107,27 +107,32 @@ class ChatSettings(BaseSettings):
     temperature: float = Field(default=0.7, alias="CHAT_TEMPERATURE")
     max_context_documents: int = Field(default=5, alias="CHAT_MAX_CONTEXT_DOCS")
     response_format: str = Field(default="text", alias="CHAT_RESPONSE_FORMAT")
-    allowed_metadata_keys: list[str] = Field(default_factory=list, alias="CHAT_ALLOWED_METADATA_KEYS")
     system_prompt_path: Optional[Path] = Field(default=None, alias="CHAT_DEFAULT_SYSTEM_PROMPT_PATH")
     enable_streaming: bool = Field(default=False, alias="CHAT_ENABLE_STREAMING")
+    allowed_metadata_keys_source: Any = Field(default=None, alias="CHAT_ALLOWED_METADATA_KEYS")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    @field_validator("allowed_metadata_keys", mode="before")
-    @classmethod
-    def _split_metadata_keys(cls, value: Any) -> list[str]:
-        """Normalise metadata key allow list from comma-separated strings."""
+    @computed_field(return_type=list[str])
+    def allowed_metadata_keys(self) -> list[str]:
+        """Expose a normalised allow-list regardless of env var format."""
 
+        value = self.allowed_metadata_keys_source
         if value in (None, "", []):
             return []
 
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return [item.strip() for item in value.split(",") if item.strip()]
+            else:
+                value = parsed
+
+        if isinstance(value, (list, tuple, set)):
             return [str(item).strip() for item in value if str(item).strip()]
 
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-
-        raise ValueError("CHAT_ALLOWED_METADATA_KEYS must be a comma-separated string or list of strings.")
+        raise ValueError("CHAT_ALLOWED_METADATA_KEYS must be a comma-separated string or JSON array of strings.")
 
 
 @lru_cache(maxsize=1)

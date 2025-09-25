@@ -13,7 +13,17 @@ from src.utils.exceptions import ChatGenerationError, ChatValidationError
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Chroma RAG Chat API", version="0.1.0")
+app = FastAPI(
+    title="Chroma RAG Chat API",
+    version="0.1.0",
+    description=(
+        "REST surface for the Chroma-backed Retrieval-Augmented Generation service. "
+        "Use the Swagger UI at /docs to explore request/response contracts."
+    ),
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+)
 app.include_router(routes.router)
 
 

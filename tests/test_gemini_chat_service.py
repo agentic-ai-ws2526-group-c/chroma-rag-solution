@@ -111,7 +111,9 @@ def test_generate_response_happy_path(monkeypatch):
     assert fake_model.calls
     contents, generation_config = fake_model.calls[0]
     assert generation_config == {"temperature": 0.8, "max_output_tokens": 128}
-    assert contents[0]["role"] == "system"
+    assert len(contents) == 1
+    assert contents[0]["role"] == "user"
+    assert "Document 1" in contents[0]["parts"][0]
 
 
 def test_generate_response_without_matches(monkeypatch):
@@ -135,7 +137,8 @@ def test_generate_response_without_matches(monkeypatch):
     response = service.generate_response(request)
 
     assert response.sources == []
-    assert "no relevant documents" in fake_model.calls[0][0][1]["parts"][0]
+    contents, _config = fake_model.calls[0]
+    assert "no relevant documents" in contents[0]["parts"][0]
 
 
 def test_generate_response_empty_query_raises():

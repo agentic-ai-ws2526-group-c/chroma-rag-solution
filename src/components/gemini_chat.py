@@ -46,7 +46,11 @@ class ChatService:
         self._chroma_component = chroma_component or ChromaComponent()
         self._model_factory = model_factory or self._default_model_factory
         self._clock = clock or time.perf_counter
-        self._system_prompt = system_prompt or self._load_system_prompt(self._settings.system_prompt_path)
+        loaded_prompt = system_prompt if system_prompt is not None else self._load_system_prompt(
+            self._settings.system_prompt_path
+        )
+        self._system_prompt = loaded_prompt
+        self._system_instruction = self._system_prompt or DEFAULT_SYSTEM_PROMPT
 
         self._ensure_gemini_configured()
 
@@ -214,6 +218,9 @@ class ChatService:
             return None
 
         expanded = path.expanduser()
+        if expanded.is_dir():
+            logger.warning("System prompt path is a directory, ignoring: %s", expanded)
+            return None
         try:
             content = expanded.read_text(encoding="utf-8").strip()
         except FileNotFoundError:
@@ -241,12 +248,13 @@ class ChatService:
         return max(1, min(override, 50))
 
     def _default_model_factory(self, model_name: str):
-        return genai.GenerativeModel(model_name)
+        kwargs: dict[str, Any] = {}
+        if self._system_instruction:
+            kwargs["system_instruction"] = self._system_instruction
+        return genai.GenerativeModel(model_name, **kwargs)
 
     def _build_contents(self, prompt: str) -> list[dict[str, Any]]:
         contents: list[dict[str, Any]] = []
-        instruction = self._system_prompt or DEFAULT_SYSTEM_PROMPT
-        contents.append({"role": "system", "parts": [instruction]})
         contents.append({"role": "user", "parts": [prompt]})
         return contents
 

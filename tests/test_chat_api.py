@@ -93,3 +93,14 @@ def test_chat_query_generation_error(override_chat_service):
 
     assert response.status_code == HTTPStatus.BAD_GATEWAY
     assert response.json()["detail"] == "Gemini timeout"
+
+
+def test_openapi_schema_available():
+    client = _client()
+
+    response = client.get("/openapi.json")
+
+    assert response.status_code == HTTPStatus.OK
+    body = response.json()
+    assert body["info"]["title"] == "Chroma RAG Chat API"
+    assert "/chat/query" in body["paths"]

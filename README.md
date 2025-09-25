@@ -52,6 +52,10 @@ uv run python main.py
 
 Standardmäßig lauscht die API auf `http://0.0.0.0:8080`. Über Umgebungsvariablen können Host/Port geändert werden (`API_HOST`, `API_PORT`, `API_RELOAD`, `API_LOG_LEVEL`).
 
+### API-Dokumentation (Swagger UI)
+
+Nach dem Start steht unter `http://localhost:8080/docs` eine interaktive Swagger-Oberfläche bereit. Sie zeigt das OpenAPI-Schema, beschreibt alle Parameter und erlaubt Testaufrufe direkt aus dem Browser. Alternativ ist die Spezifikation als JSON unter `http://localhost:8080/openapi.json` abrufbar.
+
 ## API verwenden
 
 Endpoint: `POST /chat/query`
