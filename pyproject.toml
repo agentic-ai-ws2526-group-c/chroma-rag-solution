@@ -20,3 +20,6 @@ test = [
 pythonpath = [
 	"src",
 ]
+markers = [
+	"integration: tests requiring a running Chroma service",
+]

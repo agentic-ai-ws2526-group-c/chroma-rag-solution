@@ -1,9 +1,10 @@
 """Application configuration management."""
 
+import json
 from functools import lru_cache
 from typing import Any, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -59,6 +60,29 @@ class ChromaSettings(BaseSettings):
     metadata: dict[str, Any] = Field(default_factory=dict, alias="CHROMA_DEFAULT_METADATA")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _coerce_metadata(cls, value: Any) -> dict[str, Any]:
+        """Allow metadata to be provided as JSON strings or dictionaries."""
+
+        if value in (None, "", {}):
+            return {}
+
+        if isinstance(value, dict):
+            return value
+
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:  # pragma: no cover - depends on user input
+                raise ValueError("CHROMA_DEFAULT_METADATA must be valid JSON.") from exc
+
+            if not isinstance(parsed, dict):
+                raise ValueError("CHROMA_DEFAULT_METADATA JSON must describe an object.")
+            return parsed
+
+        raise ValueError("CHROMA_DEFAULT_METADATA must be a dict, JSON object, or empty.")
 
     def base_url(self) -> str:
         """Return the base URL used to communicate with the Chroma server."""

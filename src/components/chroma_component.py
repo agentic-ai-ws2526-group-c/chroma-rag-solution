@@ -49,8 +49,11 @@ class ChromaComponent:
         settings = get_chroma_settings()
 
         self._client = client or self._build_client(settings)
-        target_collection = collection_name or settings.collection_name
-        self._collection = self._get_or_create_collection(target_collection, metadata=settings.metadata)
+        self._collection_name = collection_name or settings.collection_name
+        self._collection_metadata = settings.metadata
+        self._collection = self._get_or_create_collection(
+            self._collection_name, metadata=self._collection_metadata
+        )
 
     @property
     def collection(self) -> Collection:
@@ -136,9 +139,13 @@ class ChromaComponent:
         """Remove all documents from the current collection."""
 
         try:
-            self._collection.delete()
+            self._client.delete_collection(self._collection_name)
         except Exception as exc:  # pragma: no cover
             raise ChromaOperationError("Failed to clear the Chroma collection.") from exc
+
+        self._collection = self._get_or_create_collection(
+            self._collection_name, metadata=self._collection_metadata
+        )
 
     def count(self) -> int:
         """Return the number of items stored in the collection."""
@@ -177,59 +184,94 @@ class ChromaComponent:
 
     @staticmethod
     def _build_documents_from_response(response: Dict[str, Any]) -> List[ChromaDocument]:
-        ids = response.get("ids", [[]])
-        documents = response.get("documents", [[]])
-        metadatas = response.get("metadatas", [[]])
-        embeddings = response.get("embeddings", [[]])
+        doc_ids = ChromaComponent._flatten(response.get("ids", []))
+        doc_texts = ChromaComponent._flatten(response.get("documents", []))
+        doc_metadatas = ChromaComponent._flatten(response.get("metadatas", []))
+        doc_embeddings = ChromaComponent._flatten(response.get("embeddings", []))
 
-        if not ids:
+        if not doc_ids:
             return []
 
-        return [
-            ChromaDocument(
-                id=item_id,
-                text=item_text,
-                metadata=item_metadata or None,
-                embedding=item_embedding or None,
+        records: List[ChromaDocument] = []
+        for index, item_id in enumerate(doc_ids):
+            text = doc_texts[index] if index < len(doc_texts) else ""
+            metadata = doc_metadatas[index] if index < len(doc_metadatas) else None
+            embedding = doc_embeddings[index] if index < len(doc_embeddings) else None
+
+            if isinstance(metadata, dict) and not metadata:
+                metadata = None
+
+            records.append(
+                ChromaDocument(
+                    id=str(item_id),
+                    text=str(text) if text is not None else "",
+                    metadata=metadata,
+                    embedding=ChromaComponent._coerce_embedding(embedding),
+                )
             )
-            for item_id, item_text, item_metadata, item_embedding in zip(
-                ids[0], documents[0], metadatas[0], embeddings[0]
-            )
-        ]
+
+        return records
 
     @staticmethod
     def _build_matches_from_query(
         response: Dict[str, Any], *, include_embeddings: bool
     ) -> List[ChromaQueryMatch]:
-        ids = response.get("ids", [[]])
-        documents = response.get("documents", [[]])
-        metadatas = response.get("metadatas", [[]])
-        distances = response.get("distances", [[]])
-        embeddings = response.get("embeddings", [[]]) if include_embeddings else [[]]
+        ids = ChromaComponent._flatten(response.get("ids", []))
+        documents = ChromaComponent._flatten(response.get("documents", []))
+        metadatas = ChromaComponent._flatten(response.get("metadatas", []))
+        distance_values = ChromaComponent._flatten(response.get("distances", []))
+        embedding_values = (
+            ChromaComponent._flatten(response.get("embeddings", [])) if include_embeddings else []
+        )
 
         if not ids:
             return []
 
-        default_embedding: Sequence[float] | None = None
-        if include_embeddings and embeddings:
-            default_embedding = []
-
         matches: List[ChromaQueryMatch] = []
-        for index, item_id in enumerate(ids[0]):
-            text = documents[0][index] if documents and documents[0] else ""
-            metadata = metadatas[0][index] if metadatas and metadatas[0] else None
-            distance = float(distances[0][index]) if distances and distances[0] else 0.0
-            embedding_value: Optional[Sequence[float]] = None
-            if include_embeddings and embeddings and embeddings[0]:
-                embedding_value = embeddings[0][index]
+        for index, item_id in enumerate(ids):
+            text = documents[index] if index < len(documents) else ""
+            metadata = metadatas[index] if index < len(metadatas) else None
+            distance_raw = distance_values[index] if index < len(distance_values) else 0.0
+            embedding_value = (
+                embedding_values[index] if index < len(embedding_values) else None
+            )
+
             matches.append(
                 ChromaQueryMatch(
-                    id=item_id,
-                    text=text,
+                    id=str(item_id),
+                    text=str(text) if text is not None else "",
                     metadata=metadata,
-                    distance=distance,
-                    embedding=embedding_value or default_embedding,
+                    distance=float(distance_raw),
+                    embedding=ChromaComponent._coerce_embedding(embedding_value),
                 )
             )
 
         return matches
+
+    @staticmethod
+    def _flatten(value: Any) -> List[Any]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            if value and isinstance(value[0], list):
+                return [item for sub in value for item in sub]
+            return value
+        if isinstance(value, tuple):
+            return list(value)
+        return [value]
+
+    @staticmethod
+    def _coerce_embedding(value: Any) -> Optional[Sequence[float]]:
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)):
+            return [float(v) for v in value]
+        try:
+            import numpy as np
+
+            if isinstance(value, np.ndarray):  # pragma: no cover - requires numpy at runtime
+                return value.astype(float).tolist()
+        except Exception:  # pragma: no cover - numpy optional
+            pass
+
+        return None

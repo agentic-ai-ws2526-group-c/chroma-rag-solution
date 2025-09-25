@@ -197,6 +197,12 @@ GEMINI_RETRY_BACKOFF_SECONDS=2
 - **Pydantic**: Datenvalidierung und -serialisierung
 - **pytest**: Testing-Framework
 
+## 🧪 Tests
+
+- **Unit Tests**: `uv run --group test pytest`
+- **Integration Tests (Chroma Docker)**: `uv run --group test pytest -m integration`
+  - Voraussetzung: Docker-Container `chroma-rag-solution` läuft.
+
 ## 📖 Nächste Schritte
 
 1. **Environment Setup**: Virtuelle Umgebung und Abhängigkeiten

@@ -15,7 +15,7 @@ services:
       CHROMA_ANONYMIZED_TELEMETRY: "false"
       CHROMA_DB_IMPL: "duckdb+parquet"
     volumes:
-      - "${CHROMA_DATA_DIR:-./data}:/chroma/chroma"
+      - "${CHROMA_DATA_DIR:-./data}:/data"
     networks:
       - chroma-net
 

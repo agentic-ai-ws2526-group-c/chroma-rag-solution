@@ -151,14 +151,17 @@ def test_clear_collection(monkeypatch):
     settings = make_settings()
     monkeypatch.setattr("src.components.chroma_component.get_chroma_settings", lambda: settings)
 
-    fake_collection = mock.MagicMock()
+    initial_collection = mock.MagicMock()
+    refreshed_collection = mock.MagicMock()
     fake_client = mock.MagicMock()
-    fake_client.get_or_create_collection.return_value = fake_collection
+    fake_client.get_or_create_collection.side_effect = [initial_collection, refreshed_collection]
 
     component = ChromaComponent(client=fake_client)
     component.clear_collection()
 
-    fake_collection.delete.assert_called_once_with()
+    fake_client.delete_collection.assert_called_once_with(settings.collection_name)
+    assert fake_client.get_or_create_collection.call_count == 2
+    assert component.collection is refreshed_collection
 
 
 def test_count_handles_dict_response(monkeypatch):
