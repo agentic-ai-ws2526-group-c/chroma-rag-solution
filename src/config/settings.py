@@ -1,7 +1,7 @@
 """Application configuration management."""
 
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,3 +45,30 @@ def get_gemini_settings() -> GeminiSettings:
     """Cache and return the Gemini configuration settings."""
 
     return GeminiSettings()
+
+
+class ChromaSettings(BaseSettings):
+    """Configuration values required for interacting with Chroma DB."""
+
+    host: str = Field(default="localhost", alias="CHROMA_HOST")
+    port: int = Field(default=8000, alias="CHROMA_PORT")
+    ssl: bool = Field(default=False, alias="CHROMA_SSL")
+    collection_name: str = Field(default="documents", alias="CHROMA_COLLECTION_NAME")
+    tenant: Optional[str] = Field(default=None, alias="CHROMA_TENANT")
+    auth_token: Optional[str] = Field(default=None, alias="CHROMA_AUTH_TOKEN")
+    metadata: dict[str, Any] = Field(default_factory=dict, alias="CHROMA_DEFAULT_METADATA")
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    def base_url(self) -> str:
+        """Return the base URL used to communicate with the Chroma server."""
+
+        scheme = "https" if self.ssl else "http"
+        return f"{scheme}://{self.host}:{self.port}"
+
+
+@lru_cache(maxsize=1)
+def get_chroma_settings() -> ChromaSettings:
+    """Cache and return the Chroma configuration settings."""
+
+    return ChromaSettings()
