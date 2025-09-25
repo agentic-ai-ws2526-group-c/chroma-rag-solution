@@ -15,3 +15,11 @@ class ChromaConfigurationError(RuntimeError):
 
 class ChromaOperationError(RuntimeError):
     """Raised when a Chroma database operation fails."""
+
+
+class ChatGenerationError(RuntimeError):
+    """Raised when Gemini chat generation fails."""
+
+
+class ChatValidationError(ValueError):
+    """Raised when an incoming chat request fails validation checks."""

@@ -1,217 +1,164 @@
 # Chroma RAG Solution
 
-Ein Python-basiertes RAG (Retrieval-Augmented Generation) System mit modularer Architektur, das Chroma als Vektordatenbank und Google Gemini für Embeddings und Chat-Funktionalität nutzt.
+Python-basierte Retrieval-Augmented-Generation (RAG) Plattform: Dokumente werden in einer lokalen Chroma-Instanz gespeichert, Abfragen werden über Google Gemini eingebettet und mit Kontext beantwortet. Eine FastAPI-Anwendung (`POST /chat/query`) stellt die Chat-Funktion nach außen bereit.
 
-## 📋 Projektübersicht
+## Inhaltsverzeichnis
 
-Dieses Projekt implementiert eine modulare RAG-Lösung mit getrennten, wiederverwendbaren Komponenten. Die Architektur ermöglicht eine klare Trennung der Verantwortlichkeiten und eine einfache Erweiterung einzelner Funktionalitäten.
+1. [Architekturüberblick](#architekturüberblick)
+2. [Schnellstart](#schnellstart)
+3. [API verwenden](#api-verwenden)
+4. [Tests & Qualitätssicherung](#tests--qualitätssicherung)
+5. [Projektstruktur](#projektstruktur)
+6. [Umgebungsvariablen](#umgebungsvariablen)
+7. [Weiterführendes](#weiterführendes)
 
-## 🏗️ Architektur
+## Architekturüberblick
 
-Das System besteht aus folgenden Hauptkomponenten:
+- `src/components/chroma_component.py` kapselt CRUD- und Query-Operationen gegen Chroma (`chromadb.HttpClient`).
+- `src/components/gemini_embedding.py` verwaltet Embedding-Aufrufe an Google Gemini inkl. Retry/Backoff.
+- `src/components/gemini_chat.py` orchestriert den RAG-Flow (Embeddings → Chroma → Prompt → Gemini Antwort).
+- `src/api/app.py` + `src/api/routes.py` exponieren die Chat-Funktion über FastAPI.
+- `src/models/chat.py` definiert Pydantic-Datenmodelle für Requests/Responses.
+- `docs/chat_api_design.md` dokumentiert Architekturentscheidungen der Chat-API.
 
-### Komponenten-Übersicht
+## Schnellstart
 
-```mermaid
-graph TB
-    subgraph "Frontend Layer"
-        FC[Frontend Chat Component]
-    end
+### Voraussetzungen
 
-    subgraph "API Layer"
-        GC[Gemini Chat Interface]
-    end
+- Python ≥ 3.13 (siehe `.python-version`).
+- [uv](https://docs.astral.sh/uv/) als Paket- und Env-Manager (`uv 0.8.19` getestet).
+- Docker Desktop (für die optionale lokale Chroma-Instanz).
 
-    subgraph "Core Components"
-        GE[Gemini Embedding Service]
-        CD[Chroma Database Component]
-    end
+### Setup
 
-    subgraph "Infrastructure"
-        subgraph "Docker Container"
-            CB[Chroma Database]
-        end
-    end
-
-    FC --> GC
-    GC --> GE
-    GC --> CD
-    CD --> CB
-    GE --> CB
-
-    style FC fill:#e1f5fe
-    style GC fill:#f3e5f5
-    style GE fill:#e8f5e8
-    style CD fill:#fff3e0
-    style CB fill:#ffebee
+```powershell
+cd c:\code\chroma-rag-solution
+uv sync
+uv sync --group test  # pytest/httpx installieren
+copy .env.example .env  # und Werte anpassen
 ```
 
-### Datenfluss
+### Chroma starten (optional für Integrationstests und Live-Abfragen)
 
-```mermaid
-sequenceDiagram
-    participant FC as Frontend Chat
-    participant GC as Gemini Chat API
-    participant GE as Gemini Embedding
-    participant CD as Chroma Component
-    participant DB as Chroma DB (Docker)
-
-    FC->>GC: User Query
-    GC->>GE: Generate Query Embedding
-    GE-->>GC: Vector Embedding
-    GC->>CD: Search Similar Documents
-    CD->>DB: Vector Search
-    DB-->>CD: Relevant Documents
-    CD-->>GC: Context Documents
-    GC->>GC: Generate Response with Context
-    GC-->>FC: AI Response
+```powershell
+docker compose -f docker/docker-compose.yml up -d
 ```
 
-## 📦 Geplante Modulstruktur
+### API lokal starten
+
+```powershell
+uv run python main.py
+```
+
+Standardmäßig lauscht die API auf `http://0.0.0.0:8080`. Über Umgebungsvariablen können Host/Port geändert werden (`API_HOST`, `API_PORT`, `API_RELOAD`, `API_LOG_LEVEL`).
+
+## API verwenden
+
+Endpoint: `POST /chat/query`
+
+```json
+{
+  "query": "Explain retrieval augmented generation",
+  "metadata_filters": { "scope": "public" },
+  "override": {
+    "temperature": 0.5,
+    "top_k": 3,
+    "max_output_tokens": 512
+  }
+}
+```
+
+Beispielaufruf via `curl`:
+
+```powershell
+curl -X POST http://localhost:8080/chat/query `
+     -H "Content-Type: application/json" `
+     -d '{"query":"Explain RAG"}'
+```
+
+Antwort (`ChatQueryResponse`):
+
+```json
+{
+  "conversation_id": "...",
+  "answer": "Here is the grounded answer...",
+  "sources": [
+    {
+      "id": "doc-123",
+      "text": "Snippet",
+      "metadata": { "scope": "public" },
+      "distance": 0.42
+    }
+  ],
+  "usage": {
+    "embedding_ms": 10.0,
+    "retrieval_ms": 5.0,
+    "generation_ms": 100.0,
+    "total_ms": 115.0
+  },
+  "request_id": "..."
+}
+```
+
+**Hinweis:** Für produktiven Betrieb muss ein gültiger `GOOGLE_API_KEY` vorhanden sein. Integrationstests überspringen sich automatisch, wenn Chroma nicht erreichbar ist.
+
+## Tests & Qualitätssicherung
+
+- Vollständige Suite: `uv run pytest`
+- Nur Unit-Tests (ohne Chroma): `uv run pytest -m "not integration"`
+- API-spezifische Tests: `uv run pytest tests/test_chat_api.py`
+
+Alle neuen Features sollten die bestehende Test-Suite erweitern und lokal ausgeführt werden. GitHub Actions sind noch nicht konfiguriert.
+
+## Projektstruktur
 
 ```
-chroma-rag-solution/
+├── main.py                    # Startet Uvicorn mit FastAPI app
 ├── src/
-│   ├── __init__.py
+│   ├── api/
+│   │   ├── app.py             # FastAPI Instanz + Exception Handler
+│   │   ├── dependencies.py    # Dependency Injection (ChatService)
+│   │   └── routes.py          # /chat/query Route
 │   ├── components/
-│   │   ├── __init__.py
-│   │   ├── chroma_component.py      # Chroma Database Interface
-│   │   ├── gemini_embedding.py      # Gemini Embedding Service
-│   │   ├── gemini_chat.py          # Gemini Chat API Interface
-│   │   └── frontend_chat.py        # Frontend Chat Component
-│   ├── config/
-│   │   ├── __init__.py
-│   │   └── settings.py             # Konfiguration und Umgebungsvariablen
-│   └── utils/
-│       ├── __init__.py
-│       └── helpers.py              # Hilfsfunktionen
-├── docker/
-│   └── docker-compose.yml          # Chroma Database Container
+│   │   ├── chroma_component.py
+│   │   ├── gemini_chat.py
+│   │   └── gemini_embedding.py
+│   ├── config/settings.py     # Pydantic Settings (Gemini, Chroma, Chat)
+│   ├── models/chat.py         # Pydantic Modelle für API-Verträge
+│   └── utils/exceptions.py    # Projektspezifische Fehlerklassen
 ├── tests/
-│   ├── __init__.py
+│   ├── test_chat_api.py
 │   ├── test_chroma_component.py
-│   ├── test_gemini_embedding.py
-│   ├── test_gemini_chat.py
-│   └── test_integration.py
-├── docs/
-│   └── api.md                      # API Dokumentation
-├── requirements.txt
-├── pyproject.toml
-├── .env.example                    # Beispiel Umgebungsvariablen
-└── README.md
+│   ├── test_chroma_integration.py
+│   └── test_gemini_embedding.py
+├── docker/docker-compose.yml  # Chroma Server v2
+├── docs/chat_api_design.md
+├── pyproject.toml             # Abhängigkeiten + pytest config
+├── uv.lock
+└── .env.example
 ```
 
-## 🔧 Komponenten-Details
+## Umgebungsvariablen
 
-### 1. Chroma Database Component (`chroma_component.py`)
+| Variable                                              | Beschreibung                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------- |
+| `GOOGLE_API_KEY`                                      | API-Key für Google Gemini (Pflicht für echte Anfragen).           |
+| `EMBEDDING_MODEL`                                     | Modellname für Embeddings (Standard: `text-embedding-004`).       |
+| `CHROMA_HOST` / `CHROMA_PORT`                         | Zieladresse des Chroma-Dienstes.                                  |
+| `CHROMA_COLLECTION_NAME`                              | Collection, in die Dokumente geschrieben/abgefragt werden.        |
+| `CHROMA_DEFAULT_METADATA`                             | Default-Metadaten als JSON-Objekt.                                |
+| `CHAT_MODEL` / `CHAT_MAX_TOKENS` / `CHAT_TEMPERATURE` | Standardparameter für die Chat-Generierung.                       |
+| `CHAT_MAX_CONTEXT_DOCS`                               | Anzahl Dokumente, die pro Anfrage aus Chroma geholt werden.       |
+| `CHAT_ALLOWED_METADATA_KEYS`                          | Komma-separierte Liste erlaubter Filter (z. B. `scope,category`). |
+| `CHAT_DEFAULT_SYSTEM_PROMPT_PATH`                     | Pfad zu einer benutzerdefinierten System-Prompt-Datei.            |
+| `API_HOST` / `API_PORT`                               | Bind-Adresse der FastAPI-App (`main.py`).                         |
+| `API_RELOAD`                                          | `true`, um Automatisches Reloading zu aktivieren (nur lokal).     |
 
-- **Zweck**: Abstraktionsschicht für Chroma-Datenbankoperationen
-- **Funktionalitäten**:
-  - Verbindung zur lokalen Chroma-Instanz (Docker)
-  - Dokumente hinzufügen, aktualisieren, löschen
-  - Vektorsuche und Ähnlichkeitsabfragen
-  - Collection-Management
+Weitere Details befinden sich in `.env.example` sowie `src/config/settings.py`.
 
-### 2. Gemini Embedding Service (`gemini_embedding.py`)
+## Weiterführendes
 
-- **Zweck**: Text-zu-Vektor-Transformation mit Google Gemini
-- **Funktionalitäten**:
-  - Text-Embeddings generieren
-  - Batch-Verarbeitung für mehrere Dokumente
-  - Embedding-Modell-Konfiguration
-  - Rate-Limiting und Fehlerbehandlung
+- `docs/chat_api_design.md` – enthält Design- und Entscheidungsgrundlagen für die API.
+- Roadmap-Ideen: Streaming-Responses, Session-Verwaltung, Authentifizierung, strukturierte Logs.
 
-### 3. Gemini Chat Interface (`gemini_chat.py`)
-
-- **Zweck**: Chat-API mit RAG-Integration
-- **Funktionalitäten**:
-  - Benutzeranfragen verarbeiten
-  - Relevante Kontextdokumente abrufen
-  - Antworten mit Kontext generieren
-  - Chat-History verwalten
-
-### 4. Frontend Chat Component (`frontend_chat.py`)
-
-- **Zweck**: Benutzeroberfläche für Chat-Interaktionen
-- **Funktionalitäten**:
-  - RESTful API für Frontend-Integration
-  - WebSocket-Unterstützung für Real-time Chat
-  - Session-Management
-  - Response-Streaming
-
-## 🐳 Infrastructure
-
-### Chroma Database (Docker)
-
-- Lokale Chroma-Instanz läuft in Docker-Container (Chroma API v2)
-- Persistente Datenspeicherung
-- Konfigurierbare Ports und Volumes
-- Health-Checks und Restart-Policies
-
-## 🔑 Umgebungsvariablen
-
-```env
-# Gemini API
-GOOGLE_API_KEY=your_gemini_api_key
-
-# Chroma Database
-CHROMA_HOST=localhost
-CHROMA_PORT=8000
-CHROMA_COLLECTION_NAME=documents
-CHROMA_SSL=false
-CHROMA_TENANT=
-CHROMA_AUTH_TOKEN=
-CHROMA_DEFAULT_METADATA=
-
-# Chat Configuration
-CHAT_MODEL=gemini-2.5-flash
-EMBEDDING_MODEL=text-embedding-004
-MAX_TOKENS=2048
-TEMPERATURE=0.7
-# Gemini Embedding Tuning
-GEMINI_REQUEST_TIMEOUT=60
-GEMINI_MAX_RETRIES=3
-GEMINI_RETRY_BACKOFF_SECONDS=2
-```
-
-## 🚀 Geplante Features
-
-- [ ] Modulare Architektur mit klarer Trennung
-- [ ] Docker-basierte Chroma-Datenbank
-- [ ] Gemini-Integration für Embeddings und Chat
-- [ ] RESTful API für Frontend-Integration
-- [ ] WebSocket-Support für Real-time Chat
-- [ ] Umfassende Fehlerbehandlung und Logging
-- [ ] Unit- und Integrationstests
-- [ ] Konfigurierbare Modelle und Parameter
-- [ ] Dokumenten-Upload und -Management
-- [ ] Chat-History und Session-Management
-
-## 📚 Technologie-Stack
-
-- **Python 3.11+**: Hauptprogrammiersprache
-- **Chroma**: Vektordatenbank für Embeddings
-- **Google Gemini**: LLM für Embeddings und Chat
-- **Docker**: Containerisierung der Chroma-Datenbank
-- **FastAPI**: Web-Framework für API-Endpunkte
-- **Pydantic**: Datenvalidierung und -serialisierung
-- **pytest**: Testing-Framework
-
-## 🧪 Tests
-
-- **Unit Tests**: `uv run --group test pytest`
-- **Integration Tests (Chroma Docker)**: `uv run --group test pytest -m integration`
-  - Voraussetzung: Docker-Container `chroma-rag-solution` läuft.
-
-## 📖 Nächste Schritte
-
-1. **Environment Setup**: Virtuelle Umgebung und Abhängigkeiten
-2. **Docker Configuration**: Chroma-Container Setup
-3. **Core Components**: Implementierung der Basis-Komponenten
-4. **API Development**: RESTful Endpunkte erstellen
-5. **Testing**: Unit- und Integrationstests
-6. **Documentation**: API-Dokumentation und Beispiele
-
----
-
-> **Hinweis**: Diese README beschreibt die geplante Architektur. Die Implementierung erfolgt schrittweise nach Bestätigung der Strukturvorgaben.
+Bei Fragen oder Erweiterungen: Tests schreiben (`uv run pytest`), API manuell testen und Ergebnisse hier dokumentieren.
