@@ -143,7 +143,7 @@ chroma-rag-solution/
 
 ### Chroma Database (Docker)
 
-- Lokale Chroma-Instanz läuft in Docker-Container
+- Lokale Chroma-Instanz läuft in Docker-Container (Chroma API v2)
 - Persistente Datenspeicherung
 - Konfigurierbare Ports und Volumes
 - Health-Checks und Restart-Policies
@@ -160,10 +160,14 @@ CHROMA_PORT=8000
 CHROMA_COLLECTION_NAME=documents
 
 # Chat Configuration
-CHAT_MODEL=gemini-pro
+CHAT_MODEL=gemini-2.5-flash
 EMBEDDING_MODEL=text-embedding-004
 MAX_TOKENS=2048
 TEMPERATURE=0.7
+# Gemini Embedding Tuning
+GEMINI_REQUEST_TIMEOUT=60
+GEMINI_MAX_RETRIES=3
+GEMINI_RETRY_BACKOFF_SECONDS=2
 ```
 
 ## 🚀 Geplante Features

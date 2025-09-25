@@ -1,0 +1,49 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+.build/
+.dist/
+
+# Virtual environments
+.venv/
+venv/
+.env/
+ENV/
+
+# Poetry / pipenv / tox
+.poetry/
+.pdm.toml
+.pdm.lock
+Pipfile
+Pipfile.lock
+tox.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# Environment files
+.env
+.env.local
+.env.*
+!.env.example
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Local data & cache
+.cache/
+logs/
+*.log
+
+# Docker volumes / data
+Dockerfile.local
+**/docker/data/

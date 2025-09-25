@@ -1,0 +1,24 @@
+name: chroma-rag-solution
+
+services:
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chroma-rag-solution
+    restart: unless-stopped
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    environment:
+      CHROMA_SERVER_BIND_HOST: "0.0.0.0"
+      CHROMA_SERVER_HTTP_PORT: 8000
+      CHROMA_SERVER_VERSION: "2"
+      CHROMA_TELEMETRY_ENABLED: "false"
+      CHROMA_ANONYMIZED_TELEMETRY: "false"
+      CHROMA_DB_IMPL: "duckdb+parquet"
+    volumes:
+      - "${CHROMA_DATA_DIR:-./data}:/chroma/chroma"
+    networks:
+      - chroma-net
+
+networks:
+  chroma-net:
+    driver: bridge
